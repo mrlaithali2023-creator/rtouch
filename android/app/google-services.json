@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "481859281244",
+    "project_id": "rtouch-28ac4",
+    "storage_bucket": "rtouch-28ac4.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:481859281244:android:ef73f145f8b50158d8e199",
+        "android_client_info": {
+          "package_name": "com.rtouch.rtouch"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDMNz08fjnKJh05IJfTdiFzYWlLP8IIT7U"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
