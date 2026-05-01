@@ -2,6 +2,47 @@
 # Documentation: https://docs.codemagic.io/yaml-quick-start/building-a-flutter-app/
 
 workflows:
+  ios-test-sideload:
+    name: iOS Test Build (No Push — Sideloadly compatible)
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    environment:
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+    scripts:
+      - name: Get Flutter packages
+        script: |
+          flutter pub get
+      - name: Remove push notification entitlement
+        script: |
+          # Remove aps-environment entitlement and background modes from Info.plist
+          /usr/libexec/PlistBuddy -c "Delete :UIBackgroundModes" ios/Runner/Info.plist 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Delete :FirebaseAppDelegateProxyEnabled" ios/Runner/Info.plist 2>/dev/null || true
+          # Remove push capability from Xcode project
+          sed -i '' 's/com.apple.push-notifications//' ios/Runner.xcodeproj/project.pbxproj 2>/dev/null || true
+      - name: Pod install
+        script: |
+          cd ios
+          pod install
+      - name: Build iOS (no codesign)
+        script: |
+          flutter build ios --release --no-codesign
+      - name: Create IPA for Sideloadly
+        script: |
+          mkdir -p build/ios/ipa
+          cd build/ios/iphoneos
+          mkdir -p Payload
+          cp -r Runner.app Payload/
+          # Strip push entitlement from binary
+          codesign --remove-signature Payload/Runner.app/Runner 2>/dev/null || true
+          for framework in Payload/Runner.app/Frameworks/*.framework; do
+            codesign --remove-signature "$framework" 2>/dev/null || true
+          done
+          zip -r ../ipa/Rtouch-test-sideload.ipa Payload
+    artifacts:
+      - build/ios/ipa/Rtouch-test-sideload.ipa
+
   ios-unsigned:
     name: iOS Build (Unsigned — Simulator only)
     instance_type: mac_mini_m2
