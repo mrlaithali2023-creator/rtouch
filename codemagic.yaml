@@ -63,16 +63,32 @@ workflows:
           flutter pub get
       - name: Pod install
         script: |
-          cd ios
-          pod install
-      - name: Build iOS (no codesign)
+          cd ios && pod install
+      - name: Build iOS via xcodebuild (bypass Flutter team check)
         script: |
-          flutter build ios --release --no-codesign
+          xcodebuild \
+            -workspace ios/Runner.xcworkspace \
+            -scheme Runner \
+            -configuration Release \
+            -sdk iphoneos \
+            -archivePath build/ios/Runner.xcarchive \
+            ONLY_ACTIVE_ARCH=NO \
+            ARCHS=arm64 \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM="" \
+            PROVISIONING_PROFILE_SPECIFIER="" \
+            SYMROOT="$(pwd)/build/ios/Release" \
+            archive
       - name: Create IPA for Sideloadly
         script: |
+          APP_PATH=$(find build/ios/Runner.xcarchive -name "Runner.app" | head -1)
+          echo "App found at: $APP_PATH"
           mkdir -p build/ios/ipa/Payload
-          cp -r build/ios/iphoneos/Runner.app build/ios/ipa/Payload/
+          cp -r "$APP_PATH" build/ios/ipa/Payload/
           cd build/ios/ipa
+          zip -r Rtouch-test-sideload.ipa Payload
           zip -r Rtouch-test-sideload.ipa Payload
     artifacts:
       - build/ios/ipa/Rtouch-test-sideload.ipa
