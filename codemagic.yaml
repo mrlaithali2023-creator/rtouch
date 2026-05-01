@@ -11,16 +11,49 @@ workflows:
       xcode: latest
       cocoapods: default
     scripts:
+      - name: Strip firebase_messaging from project
+        script: |
+          # Remove firebase_messaging and firebase_core from pubspec.yaml
+          sed -i '' '/firebase_messaging/d' pubspec.yaml
+          sed -i '' '/firebase_core/d' pubspec.yaml
+          sed -i '' '/flutter_local_notifications/d' pubspec.yaml
+
+          # Replace push_service.dart with a no-op stub
+          cat > lib/services/push_service.dart << 'STUB'
+          import 'package:flutter/foundation.dart';
+          Future<void> firebaseMessagingBackgroundHandler(dynamic message) async {}
+          class PushService {
+            PushService._();
+            static final PushService instance = PushService._();
+            Future<void> init() async {
+              debugPrint('PushService: disabled in test build');
+            }
+          }
+          STUB
+
+          # Remove Firebase init from AppDelegate.swift
+          cat > ios/Runner/AppDelegate.swift << 'SWIFT'
+          import UIKit
+          import Flutter
+
+          @main
+          @objc class AppDelegate: FlutterAppDelegate {
+            override func application(
+              _ application: UIApplication,
+              didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
+            ) -> Bool {
+              GeneratedPluginRegistrant.register(with: self)
+              return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+            }
+          }
+          SWIFT
+
+          # Remove UIBackgroundModes from Info.plist
+          /usr/libexec/PlistBuddy -c "Delete :UIBackgroundModes" ios/Runner/Info.plist 2>/dev/null || true
+
       - name: Get Flutter packages
         script: |
           flutter pub get
-      - name: Remove push notification entitlement
-        script: |
-          # Remove aps-environment entitlement and background modes from Info.plist
-          /usr/libexec/PlistBuddy -c "Delete :UIBackgroundModes" ios/Runner/Info.plist 2>/dev/null || true
-          /usr/libexec/PlistBuddy -c "Delete :FirebaseAppDelegateProxyEnabled" ios/Runner/Info.plist 2>/dev/null || true
-          # Remove push capability from Xcode project
-          sed -i '' 's/com.apple.push-notifications//' ios/Runner.xcodeproj/project.pbxproj 2>/dev/null || true
       - name: Pod install
         script: |
           cd ios
@@ -34,11 +67,6 @@ workflows:
           cd build/ios/iphoneos
           mkdir -p Payload
           cp -r Runner.app Payload/
-          # Strip push entitlement from binary
-          codesign --remove-signature Payload/Runner.app/Runner 2>/dev/null || true
-          for framework in Payload/Runner.app/Frameworks/*.framework; do
-            codesign --remove-signature "$framework" 2>/dev/null || true
-          done
           zip -r ../ipa/Rtouch-test-sideload.ipa Payload
     artifacts:
       - build/ios/ipa/Rtouch-test-sideload.ipa
