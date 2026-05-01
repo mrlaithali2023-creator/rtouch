@@ -11,88 +11,88 @@ workflows:
       xcode: latest
       cocoapods: default
     scripts:
-      - name: Strip firebase_messaging from project
+      - name: Strip Firebase from project
         script: |
-          # Remove firebase_messaging and firebase_core from pubspec.yaml
           sed -i '' '/firebase_messaging/d' pubspec.yaml
           sed -i '' '/firebase_core/d' pubspec.yaml
           sed -i '' '/flutter_local_notifications/d' pubspec.yaml
 
-          # Rewrite main.dart without Firebase imports
-          cat > lib/main.dart << 'MAINDART'
-import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
+          python3 - << 'EOF'
+          import os
 
-import 'screens/home_screen.dart';
-import 'services/push_service.dart';
-import 'theme.dart';
+          main = """import 'package:flutter/material.dart';
+          import 'package:flutter/services.dart';
+          import 'package:flutter_localizations/flutter_localizations.dart';
+          import 'screens/home_screen.dart';
+          import 'services/push_service.dart';
+          import 'theme.dart';
 
-Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  SystemChrome.setSystemUIOverlayStyle(
-    const SystemUiOverlayStyle(
-      statusBarColor: Colors.transparent,
-      statusBarIconBrightness: Brightness.dark,
-    ),
-  );
-  await PushService.instance.init();
-  runApp(const RtouchApp());
-}
+          Future<void> main() async {
+            WidgetsFlutterBinding.ensureInitialized();
+            SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
+              statusBarColor: Colors.transparent,
+              statusBarIconBrightness: Brightness.dark,
+            ));
+            await PushService.instance.init();
+            runApp(const RtouchApp());
+          }
 
-class RtouchApp extends StatelessWidget {
-  const RtouchApp({super.key});
+          class RtouchApp extends StatelessWidget {
+            const RtouchApp({super.key});
+            @override
+            Widget build(BuildContext context) {
+              return MaterialApp(
+                title: 'Rtouch',
+                debugShowCheckedModeBanner: false,
+                theme: buildAppTheme(),
+                locale: const Locale('ar'),
+                supportedLocales: const [Locale('ar'), Locale('en')],
+                localizationsDelegates: const [
+                  GlobalMaterialLocalizations.delegate,
+                  GlobalWidgetsLocalizations.delegate,
+                  GlobalCupertinoLocalizations.delegate,
+                ],
+                home: const HomeScreen(),
+              );
+            }
+          }
+          """
 
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Rtouch',
-      debugShowCheckedModeBanner: false,
-      theme: buildAppTheme(),
-      locale: const Locale('ar'),
-      supportedLocales: const [Locale('ar'), Locale('en')],
-      localizationsDelegates: const [
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-      ],
-      home: const HomeScreen(),
-    );
-  }
-}
-MAINDART
+          push = """import 'package:flutter/foundation.dart';
+          Future<void> firebaseMessagingBackgroundHandler(dynamic m) async {}
+          class PushService {
+            PushService._();
+            static final PushService instance = PushService._();
+            Future<void> init() async { debugPrint('PushService: disabled'); }
+          }
+          """
 
-          # Replace push_service.dart with a no-op stub
-          cat > lib/services/push_service.dart << 'STUB'
-import 'package:flutter/foundation.dart';
-Future<void> firebaseMessagingBackgroundHandler(dynamic message) async {}
-class PushService {
-  PushService._();
-  static final PushService instance = PushService._();
-  Future<void> init() async {
-    debugPrint('PushService: disabled in test build');
-  }
-}
-STUB
+          appdelegate = """import UIKit
+          import Flutter
 
-          # Remove Firebase init from AppDelegate.swift
-          cat > ios/Runner/AppDelegate.swift << 'SWIFT'
-import UIKit
-import Flutter
+          @main
+          @objc class AppDelegate: FlutterAppDelegate {
+            override func application(
+              _ application: UIApplication,
+              didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
+            ) -> Bool {
+              GeneratedPluginRegistrant.register(with: self)
+              return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+            }
+          }
+          """
 
-@main
-@objc class AppDelegate: FlutterAppDelegate {
-  override func application(
-    _ application: UIApplication,
-    didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
-  ) -> Bool {
-    GeneratedPluginRegistrant.register(with: self)
-    return super.application(application, didFinishLaunchingWithOptions: launchOptions)
-  }
-}
-SWIFT
+          import textwrap
+          with open('lib/main.dart', 'w') as f:
+            f.write(textwrap.dedent(main))
+          with open('lib/services/push_service.dart', 'w') as f:
+            f.write(textwrap.dedent(push))
+          with open('ios/Runner/AppDelegate.swift', 'w') as f:
+            f.write(textwrap.dedent(appdelegate))
 
-          # Remove UIBackgroundModes and Firebase keys from Info.plist
+          print("Files rewritten successfully")
+          EOF
+
           /usr/libexec/PlistBuddy -c "Delete :UIBackgroundModes" ios/Runner/Info.plist 2>/dev/null || true
           /usr/libexec/PlistBuddy -c "Delete :FirebaseAppDelegateProxyEnabled" ios/Runner/Info.plist 2>/dev/null || true
 
@@ -102,7 +102,7 @@ SWIFT
       - name: Pod install
         script: |
           cd ios && pod install
-      - name: Build iOS via xcodebuild (bypass Flutter team check)
+      - name: Build iOS via xcodebuild
         script: |
           xcodebuild \
             -workspace ios/Runner.xcworkspace \
@@ -117,7 +117,6 @@ SWIFT
             CODE_SIGN_IDENTITY="" \
             DEVELOPMENT_TEAM="" \
             PROVISIONING_PROFILE_SPECIFIER="" \
-            SYMROOT="$(pwd)/build/ios/Release" \
             archive
       - name: Create IPA for Sideloadly
         script: |
@@ -126,7 +125,6 @@ SWIFT
           mkdir -p build/ios/ipa/Payload
           cp -r "$APP_PATH" build/ios/ipa/Payload/
           cd build/ios/ipa
-          zip -r Rtouch-test-sideload.ipa Payload
           zip -r Rtouch-test-sideload.ipa Payload
     artifacts:
       - build/ios/ipa/Rtouch-test-sideload.ipa
