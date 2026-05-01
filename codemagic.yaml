@@ -18,45 +18,83 @@ workflows:
           sed -i '' '/firebase_core/d' pubspec.yaml
           sed -i '' '/flutter_local_notifications/d' pubspec.yaml
 
+          # Rewrite main.dart without Firebase imports
+          cat > lib/main.dart << 'MAINDART'
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+
+import 'screens/home_screen.dart';
+import 'services/push_service.dart';
+import 'theme.dart';
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.dark,
+    ),
+  );
+  await PushService.instance.init();
+  runApp(const RtouchApp());
+}
+
+class RtouchApp extends StatelessWidget {
+  const RtouchApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Rtouch',
+      debugShowCheckedModeBanner: false,
+      theme: buildAppTheme(),
+      locale: const Locale('ar'),
+      supportedLocales: const [Locale('ar'), Locale('en')],
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      home: const HomeScreen(),
+    );
+  }
+}
+MAINDART
+
           # Replace push_service.dart with a no-op stub
           cat > lib/services/push_service.dart << 'STUB'
-          import 'package:flutter/foundation.dart';
-          Future<void> firebaseMessagingBackgroundHandler(dynamic message) async {}
-          class PushService {
-            PushService._();
-            static final PushService instance = PushService._();
-            Future<void> init() async {
-              debugPrint('PushService: disabled in test build');
-            }
-          }
-          STUB
+import 'package:flutter/foundation.dart';
+Future<void> firebaseMessagingBackgroundHandler(dynamic message) async {}
+class PushService {
+  PushService._();
+  static final PushService instance = PushService._();
+  Future<void> init() async {
+    debugPrint('PushService: disabled in test build');
+  }
+}
+STUB
 
           # Remove Firebase init from AppDelegate.swift
           cat > ios/Runner/AppDelegate.swift << 'SWIFT'
-          import UIKit
-          import Flutter
+import UIKit
+import Flutter
 
-          @main
-          @objc class AppDelegate: FlutterAppDelegate {
-            override func application(
-              _ application: UIApplication,
-              didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
-            ) -> Bool {
-              GeneratedPluginRegistrant.register(with: self)
-              return super.application(application, didFinishLaunchingWithOptions: launchOptions)
-            }
-          }
-          SWIFT
+@main
+@objc class AppDelegate: FlutterAppDelegate {
+  override func application(
+    _ application: UIApplication,
+    didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
+  ) -> Bool {
+    GeneratedPluginRegistrant.register(with: self)
+    return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+  }
+}
+SWIFT
 
-          # Remove UIBackgroundModes from Info.plist
+          # Remove UIBackgroundModes and Firebase keys from Info.plist
           /usr/libexec/PlistBuddy -c "Delete :UIBackgroundModes" ios/Runner/Info.plist 2>/dev/null || true
           /usr/libexec/PlistBuddy -c "Delete :FirebaseAppDelegateProxyEnabled" ios/Runner/Info.plist 2>/dev/null || true
-
-          # Disable automatic code signing in Xcode project
-          sed -i '' 's/CODE_SIGN_STYLE = Automatic;/CODE_SIGN_STYLE = Manual;/g' ios/Runner.xcodeproj/project.pbxproj
-          sed -i '' 's/DEVELOPMENT_TEAM = [A-Z0-9]*;/DEVELOPMENT_TEAM = "";/g' ios/Runner.xcodeproj/project.pbxproj
-          sed -i '' 's/CODE_SIGN_IDENTITY = "Apple Development";/CODE_SIGN_IDENTITY = "";/g' ios/Runner.xcodeproj/project.pbxproj
-          sed -i '' 's/CODE_SIGN_IDENTITY = "iPhone Developer";/CODE_SIGN_IDENTITY = "";/g' ios/Runner.xcodeproj/project.pbxproj
 
       - name: Get Flutter packages
         script: |
