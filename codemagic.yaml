@@ -20,10 +20,34 @@ workflows:
       - name: Build iOS (no codesign)
         script: |
           flutter build ios --release --no-codesign
-      - name: Create IPA
+      - name: Strip entitlements and create IPA
         script: |
+          APP="build/ios/iphoneos/Runner.app"
+          BINARY="$APP/Runner"
+
+          echo "=== Before strip ==="
+          codesign -d --entitlements - "$BINARY" 2>&1 || echo "No signature"
+
+          # Force-apply minimal entitlements using ldid (strips aps-environment)
+          brew install ldid 2>/dev/null || true
+
+          printf '<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>get-task-allow</key><true/></dict></plist>' > /tmp/ent.xml
+
+          ldid -S/tmp/ent.xml "$BINARY" 2>/dev/null && echo "ldid applied" || echo "ldid failed"
+
+          # Also strip from all frameworks
+          find "$APP/Frameworks" \( -name "*.framework" -o -name "*.dylib" \) 2>/dev/null | while read fw; do
+            bin="${fw%.*}"
+            name=$(basename "$bin")
+            [ -f "$fw/$name" ] && ldid -S/tmp/ent.xml "$fw/$name" 2>/dev/null || true
+            [ -f "$bin" ] && ldid -S/tmp/ent.xml "$bin" 2>/dev/null || true
+          done
+
+          echo "=== After strip ==="
+          ldid -e "$BINARY" 2>&1 || echo "Clean - no entitlements"
+
           mkdir -p build/ios/ipa/Payload
-          cp -r build/ios/iphoneos/Runner.app build/ios/ipa/Payload/
+          cp -r "$APP" build/ios/ipa/Payload/
           cd build/ios/ipa
           zip -r Rtouch-sideload.ipa Payload
     artifacts:
