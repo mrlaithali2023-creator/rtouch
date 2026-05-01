@@ -95,6 +95,7 @@ workflows:
 
           /usr/libexec/PlistBuddy -c "Delete :UIBackgroundModes" ios/Runner/Info.plist 2>/dev/null || true
           /usr/libexec/PlistBuddy -c "Delete :FirebaseAppDelegateProxyEnabled" ios/Runner/Info.plist 2>/dev/null || true
+          echo "Done stripping Firebase"
 
       - name: Get Flutter packages
         script: |
