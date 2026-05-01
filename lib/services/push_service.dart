@@ -1,8 +1,14 @@
-import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
-import 'notifications_service.dart';
+Future<void> firebaseMessagingBackgroundHandler(dynamic message) async {}
+
+class PushService {
+  PushService._();
+  static final PushService instance = PushService._();
+  Future<void> init() async {
+    debugPrint('PushService: notifications disabled in this build');
+  }
+}
 
 /// Top-level handler required by FCM for background/terminated messages.
 @pragma('vm:entry-point')

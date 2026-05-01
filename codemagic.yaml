@@ -3,7 +3,7 @@
 
 workflows:
   ios-test-sideload:
-    name: iOS Test Build (No Push — Sideloadly compatible)
+    name: iOS Test Build (No Firebase — Sideloadly compatible)
     instance_type: mac_mini_m2
     max_build_duration: 60
     environment:
@@ -11,92 +11,6 @@ workflows:
       xcode: latest
       cocoapods: default
     scripts:
-      - name: Strip Firebase from project
-        script: |
-          sed -i '' '/firebase_messaging/d' pubspec.yaml
-          sed -i '' '/firebase_core/d' pubspec.yaml
-          sed -i '' '/flutter_local_notifications/d' pubspec.yaml
-
-          python3 - << 'EOF'
-          import os
-
-          main = """import 'package:flutter/material.dart';
-          import 'package:flutter/services.dart';
-          import 'package:flutter_localizations/flutter_localizations.dart';
-          import 'screens/home_screen.dart';
-          import 'services/push_service.dart';
-          import 'theme.dart';
-
-          Future<void> main() async {
-            WidgetsFlutterBinding.ensureInitialized();
-            SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-              statusBarColor: Colors.transparent,
-              statusBarIconBrightness: Brightness.dark,
-            ));
-            await PushService.instance.init();
-            runApp(const RtouchApp());
-          }
-
-          class RtouchApp extends StatelessWidget {
-            const RtouchApp({super.key});
-            @override
-            Widget build(BuildContext context) {
-              return MaterialApp(
-                title: 'Rtouch',
-                debugShowCheckedModeBanner: false,
-                theme: buildAppTheme(),
-                locale: const Locale('ar'),
-                supportedLocales: const [Locale('ar'), Locale('en')],
-                localizationsDelegates: const [
-                  GlobalMaterialLocalizations.delegate,
-                  GlobalWidgetsLocalizations.delegate,
-                  GlobalCupertinoLocalizations.delegate,
-                ],
-                home: const HomeScreen(),
-              );
-            }
-          }
-          """
-
-          push = """import 'package:flutter/foundation.dart';
-          Future<void> firebaseMessagingBackgroundHandler(dynamic m) async {}
-          class PushService {
-            PushService._();
-            static final PushService instance = PushService._();
-            Future<void> init() async { debugPrint('PushService: disabled'); }
-          }
-          """
-
-          appdelegate = """import UIKit
-          import Flutter
-
-          @main
-          @objc class AppDelegate: FlutterAppDelegate {
-            override func application(
-              _ application: UIApplication,
-              didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
-            ) -> Bool {
-              GeneratedPluginRegistrant.register(with: self)
-              return super.application(application, didFinishLaunchingWithOptions: launchOptions)
-            }
-          }
-          """
-
-          import textwrap
-          with open('lib/main.dart', 'w') as f:
-            f.write(textwrap.dedent(main))
-          with open('lib/services/push_service.dart', 'w') as f:
-            f.write(textwrap.dedent(push))
-          with open('ios/Runner/AppDelegate.swift', 'w') as f:
-            f.write(textwrap.dedent(appdelegate))
-
-          print("Files rewritten successfully")
-          EOF
-
-          /usr/libexec/PlistBuddy -c "Delete :UIBackgroundModes" ios/Runner/Info.plist 2>/dev/null || true
-          /usr/libexec/PlistBuddy -c "Delete :FirebaseAppDelegateProxyEnabled" ios/Runner/Info.plist 2>/dev/null || true
-          echo "Done stripping Firebase"
-
       - name: Get Flutter packages
         script: |
           flutter pub get
@@ -106,22 +20,14 @@ workflows:
       - name: Build iOS (no codesign)
         script: |
           flutter build ios --release --no-codesign
-      - name: Strip signatures and create IPA
+      - name: Create IPA
         script: |
-          APP="build/ios/iphoneos/Runner.app"
-          # Remove any code signature so Sideloadly starts fresh
-          codesign --remove-signature "$APP" 2>/dev/null || true
-          find "$APP/Frameworks" -name "*.framework" -o -name "*.dylib" 2>/dev/null | while read f; do
-            codesign --remove-signature "$f" 2>/dev/null || true
-          done
-          # Show what entitlements remain (for debugging)
-          echo "=== Entitlements check ==="
-          codesign -d --entitlements - "$APP" 2>&1 || echo "No signature - clean!"
-          # Package
           mkdir -p build/ios/ipa/Payload
-          cp -r "$APP" build/ios/ipa/Payload/
+          cp -r build/ios/iphoneos/Runner.app build/ios/ipa/Payload/
           cd build/ios/ipa
-          zip -r Rtouch-test-sideload.ipa Payload
+          zip -r Rtouch-sideload.ipa Payload
+    artifacts:
+      - build/ios/ipa/Rtouch-sideload.ipa
     artifacts:
       - build/ios/ipa/Rtouch-test-sideload.ipa
 
