@@ -103,28 +103,23 @@ workflows:
       - name: Pod install
         script: |
           cd ios && pod install
-      - name: Build iOS via xcodebuild
+      - name: Build iOS (no codesign)
         script: |
-          xcodebuild \
-            -workspace ios/Runner.xcworkspace \
-            -scheme Runner \
-            -configuration Release \
-            -sdk iphoneos \
-            -archivePath build/ios/Runner.xcarchive \
-            ONLY_ACTIVE_ARCH=NO \
-            ARCHS=arm64 \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY="" \
-            DEVELOPMENT_TEAM="" \
-            PROVISIONING_PROFILE_SPECIFIER="" \
-            archive
-      - name: Create IPA for Sideloadly
+          flutter build ios --release --no-codesign
+      - name: Strip signatures and create IPA
         script: |
-          APP_PATH=$(find build/ios/Runner.xcarchive -name "Runner.app" | head -1)
-          echo "App found at: $APP_PATH"
+          APP="build/ios/iphoneos/Runner.app"
+          # Remove any code signature so Sideloadly starts fresh
+          codesign --remove-signature "$APP" 2>/dev/null || true
+          find "$APP/Frameworks" -name "*.framework" -o -name "*.dylib" 2>/dev/null | while read f; do
+            codesign --remove-signature "$f" 2>/dev/null || true
+          done
+          # Show what entitlements remain (for debugging)
+          echo "=== Entitlements check ==="
+          codesign -d --entitlements - "$APP" 2>&1 || echo "No signature - clean!"
+          # Package
           mkdir -p build/ios/ipa/Payload
-          cp -r "$APP_PATH" build/ios/ipa/Payload/
+          cp -r "$APP" build/ios/ipa/Payload/
           cd build/ios/ipa
           zip -r Rtouch-test-sideload.ipa Payload
     artifacts:
