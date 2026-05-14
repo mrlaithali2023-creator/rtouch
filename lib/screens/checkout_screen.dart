@@ -148,7 +148,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       appBar: AppBar(title: const Text('إتمام الطلب')),
       body: AnimatedBuilder(
         animation: cart,
-        builder: (_, __) {
+        builder: (_, _) {
           if (cart.isEmpty) {
             return const Center(child: Text('سلتك فارغة'));
           }

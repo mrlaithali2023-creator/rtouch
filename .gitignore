@@ -48,3 +48,16 @@ app.*.map.json
 rtouch-28ac4-firebase-adminsdk-fbsvc-477181b51d.json
 *.json
 !pubspec.lock
+
+# Secrets and signing
+*.jks
+*.keystore
+key.properties
+pass_key_very_importent.txt
+rtouch_signing_key_INFO.txt
+rtouch_permissions_for_play.txt
+test-entitlements.plist
+
+# Build artifacts
+*.ipa
+ipa_work/

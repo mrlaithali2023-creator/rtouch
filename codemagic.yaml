@@ -2,8 +2,8 @@
 # Documentation: https://docs.codemagic.io/yaml-quick-start/building-a-flutter-app/
 
 workflows:
-  ios-test-sideload:
-    name: iOS Test Build (No Firebase — Sideloadly / Free Apple ID compatible)
+  ios-sideload:
+    name: iOS Build (Unsigned IPA for Sideloadly)
     instance_type: mac_mini_m2
     max_build_duration: 60
     environment:
@@ -11,104 +11,6 @@ workflows:
       xcode: latest
       cocoapods: default
     scripts:
-      - name: Strip Firebase and push capabilities for sideload
-        script: |
-          set -e
-
-          # Remove Firebase + heavy plugins from pubspec.yaml
-          sed -i '' '/^[[:space:]]*firebase_messaging:/d' pubspec.yaml
-          sed -i '' '/^[[:space:]]*firebase_core:/d' pubspec.yaml
-          sed -i '' '/^[[:space:]]*flutter_local_notifications:/d' pubspec.yaml
-
-          # Rewrite main.dart, push_service.dart, AppDelegate.swift with Firebase-free versions
-          python3 - <<'EOF'
-          main_dart = '''import 'package:flutter/material.dart';
-          import 'package:flutter/services.dart';
-          import 'package:flutter_localizations/flutter_localizations.dart';
-
-          import 'screens/home_screen.dart';
-          import 'services/push_service.dart';
-          import 'theme.dart';
-
-          Future<void> main() async {
-            WidgetsFlutterBinding.ensureInitialized();
-            SystemChrome.setSystemUIOverlayStyle(
-              const SystemUiOverlayStyle(
-                statusBarColor: Colors.transparent,
-                statusBarIconBrightness: Brightness.dark,
-              ),
-            );
-            try {
-              await PushService.instance.init();
-            } catch (e) {
-              debugPrint('Push init skipped: $e');
-            }
-            runApp(const RtouchApp());
-          }
-          '''
-
-          push_dart = '''import 'package:flutter/foundation.dart';
-
-          Future<void> firebaseMessagingBackgroundHandler(dynamic m) async {}
-
-          class PushService {
-            PushService._();
-            static final PushService instance = PushService._();
-            Future<void> init() async {
-              debugPrint('PushService: disabled in sideload build');
-            }
-          }
-          '''
-
-          appdelegate = '''import Flutter
-          import UIKit
-
-          @main
-          @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
-            override func application(
-              _ application: UIApplication,
-              didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
-            ) -> Bool {
-              return super.application(application, didFinishLaunchingWithOptions: launchOptions)
-            }
-
-            func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
-              GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
-            }
-          }
-          '''
-
-          import textwrap, os
-
-          # Read existing main.dart to keep RtouchApp class body intact, replace top portion only
-          with open('lib/main.dart', 'r') as f:
-              full = f.read()
-          idx = full.find('class RtouchApp')
-          if idx == -1:
-              new_main = textwrap.dedent(main_dart)
-          else:
-              new_main = textwrap.dedent(main_dart) + '\n' + full[idx:]
-
-          with open('lib/main.dart', 'w') as f:
-              f.write(new_main)
-          with open('lib/services/push_service.dart', 'w') as f:
-              f.write(textwrap.dedent(push_dart))
-          with open('ios/Runner/AppDelegate.swift', 'w') as f:
-              f.write(textwrap.dedent(appdelegate))
-
-          print('Stripped Firebase from sources')
-          EOF
-
-          # Strip push-related Info.plist keys
-          /usr/libexec/PlistBuddy -c "Delete :UIBackgroundModes" ios/Runner/Info.plist 2>/dev/null || true
-          /usr/libexec/PlistBuddy -c "Delete :FirebaseAppDelegateProxyEnabled" ios/Runner/Info.plist 2>/dev/null || true
-
-          # Remove GoogleService-Info.plist so it's not embedded
-          rm -f ios/Runner/GoogleService-Info.plist
-
-          echo "=== Firebase stripped successfully ==="
-          grep -E 'firebase|local_notif' pubspec.yaml || echo "(no Firebase deps remaining)"
-
       - name: Get Flutter packages
         script: |
           flutter pub get
@@ -118,52 +20,22 @@ workflows:
       - name: Build iOS (no codesign)
         script: |
           flutter build ios --release --no-codesign
-      - name: Strip signatures and create IPA
+      - name: Strip signatures and package IPA
         script: |
           APP="build/ios/iphoneos/Runner.app"
           codesign --remove-signature "$APP" 2>/dev/null || true
-          find "$APP/Frameworks" -name "*.framework" -o -name "*.dylib" 2>/dev/null | while read f; do
+          find "$APP/Frameworks" \( -name "*.framework" -o -name "*.dylib" \) 2>/dev/null | while read f; do
             codesign --remove-signature "$f" 2>/dev/null || true
           done
-          echo "=== Frameworks count (must be <= 10 for free Apple ID) ==="
+          echo "=== Frameworks (must be <= 10 for free Apple ID signing) ==="
           ls -1 "$APP/Frameworks" 2>/dev/null | wc -l
           ls -1 "$APP/Frameworks" 2>/dev/null
           mkdir -p build/ios/ipa/Payload
           cp -r "$APP" build/ios/ipa/Payload/
           cd build/ios/ipa
-          zip -r Rtouch-test-sideload.ipa Payload
+          zip -r Rtouch.ipa Payload
     artifacts:
-      - build/ios/ipa/Rtouch-test-sideload.ipa
-
-  ios-unsigned:
-    name: iOS Build (Unsigned — Simulator only)
-    instance_type: mac_mini_m2
-    max_build_duration: 60
-    environment:
-      flutter: stable
-      xcode: latest
-      cocoapods: default
-    scripts:
-      - name: Get Flutter packages
-        script: |
-          flutter pub get
-      - name: Pod install
-        script: |
-          cd ios
-          pod install
-      - name: Build iOS (no codesign)
-        script: |
-          flutter build ios --release --no-codesign
-      - name: Create unsigned IPA
-        script: |
-          mkdir -p build/ios/ipa
-          cd build/ios/iphoneos
-          mkdir -p Payload
-          cp -r Runner.app Payload/
-          zip -r ../ipa/Rtouch-unsigned.ipa Payload
-    artifacts:
-      - build/ios/ipa/*.ipa
-      - build/ios/iphoneos/Runner.app
+      - build/ios/ipa/Rtouch.ipa
 
   ios-signed:
     name: iOS Build (Signed — Ad Hoc / TestFlight)
@@ -173,7 +45,7 @@ workflows:
       app_store_connect: codemagic
     environment:
       ios_signing:
-        distribution_type: ad_hoc      # غيّرها إلى app_store للنشر على TestFlight
+        distribution_type: ad_hoc
         bundle_identifier: com.rtouch.rtouch
       flutter: stable
       xcode: latest
@@ -182,13 +54,12 @@ workflows:
       - name: Get Flutter packages
         script: |
           flutter pub get
-      - name: Set up code signing settings on Xcode project
+      - name: Set up code signing
         script: |
           xcode-project use-profiles
       - name: Pod install
         script: |
-          cd ios
-          pod install
+          cd ios && pod install
       - name: Increment build number
         script: |
           cd ios
@@ -200,10 +71,3 @@ workflows:
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
-    publishing:
-      email:
-        recipients:
-          - your-email@example.com
-        notify:
-          success: true
-          failure: true

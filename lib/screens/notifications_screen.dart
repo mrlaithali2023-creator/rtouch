@@ -35,7 +35,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       ),
       body: AnimatedBuilder(
         animation: NotificationsService.instance,
-        builder: (_, __) {
+        builder: (_, _) {
           final items = NotificationsService.instance.items;
           if (items.isEmpty) {
             return _empty();
@@ -43,7 +43,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           return ListView.separated(
             padding: const EdgeInsets.all(16),
             itemCount: items.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 10),
+            separatorBuilder: (_, _) => const SizedBox(height: 10),
             itemBuilder: (_, i) {
               final n = items[i];
               return Container(

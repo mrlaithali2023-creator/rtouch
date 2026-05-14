@@ -13,7 +13,7 @@ class CartScreen extends StatelessWidget {
       appBar: AppBar(title: const Text('سلة المشتريات')),
       body: AnimatedBuilder(
         animation: CartService.instance,
-        builder: (_, __) {
+        builder: (_, _) {
           final cart = CartService.instance;
           if (cart.isEmpty) {
             return const _EmptyCart();
@@ -24,7 +24,7 @@ class CartScreen extends StatelessWidget {
                 child: ListView.separated(
                   padding: const EdgeInsets.all(16),
                   itemCount: cart.items.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 12),
+                  separatorBuilder: (_, _) => const SizedBox(height: 12),
                   itemBuilder: (_, i) {
                     final it = cart.items[i];
                     return Container(
